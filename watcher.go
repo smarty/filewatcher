@@ -10,39 +10,73 @@ import (
 type pollingWatcher struct {
 	childContext context.Context
 	shutdown     context.CancelFunc
-	filename     string
+	filenames    []string
 	interval     time.Duration
 	notify       func()
-	known        time.Time
+	logger       logger
+	known        []time.Time
 }
 
-func newSimpleWatcher(parent context.Context, filename string, interval time.Duration, notify func()) ListenCloser {
-	if len(filename) == 0 || interval < 0 {
+func newSimpleWatcher(config configuration) ListenCloser {
+	if len(config.filenames) == 0 || config.interval < 0 {
 		return nop{}
 	}
 
-	child, shutdown := context.WithCancel(parent)
+	filenames := make([]string, 0, len(config.filenames))
+	for _, filename := range config.filenames {
+		filenames = append(filenames, filename)
+	}
+
+	child, shutdown := context.WithCancel(config.context)
 	return &pollingWatcher{
 		childContext: child,
 		shutdown:     shutdown,
-		filename:     filename,
-		interval:     interval,
-		notify:       notify,
+		filenames:    filenames,
+		interval:     config.interval,
+		notify:       config.notify,
+		logger:       config.logger,
+		known:        make([]time.Time, len(filenames)),
 	}
 }
 
 func (this *pollingWatcher) Listen() {
-	this.known = this.lastModified()
+	this.update()
+
 	for this.sleep() {
-		if lastModified := this.lastModified(); lastModified.After(this.known) {
-			this.known = lastModified
+		if this.update() {
 			this.notify()
 		}
 	}
 }
-func (this *pollingWatcher) lastModified() time.Time {
+func (this *pollingWatcher) update() (updated bool) {
+	count := 0
+
+	for index, _ := range this.filenames {
+		lastModified := this.lastModified(this.filenames[index])
+		if lastModified.IsZero() {
+			continue // no modification time
+		}
+
+		if this.known[index].IsZero() {
+			continue // no last modified time; don't notify subscribers
+		}
+
+		if !lastModified.After(this.known[index]) {
+			continue // file hasn't been modified since last check
+		}
+
+		count++
+		updated = true
+		this.known[index] = lastModified
+		this.logger.Printf("[INFO] Watched file [%s] was modified on [%s].", this.filenames[index], lastModified.String())
+	}
+
+	this.logger.Printf("[INFO] [%d] watched files modified, notifying subscribers...", count)
+	return updated
+}
+func (this *pollingWatcher) lastModified(filename string) time.Time {
 	// simple: using last-modification timestamp instead of file hash
-	stat, _ := os.Stat(this.filename)
+	stat, _ := os.Stat(filename)
 	return stat.ModTime()
 }
 func (this *pollingWatcher) sleep() bool {

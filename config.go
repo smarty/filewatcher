@@ -9,14 +9,18 @@ import (
 func New(options ...option) ListenCloser {
 	var config configuration
 	Options.apply(options...)(&config)
-	return newSimpleWatcher(config.context, config.filename, config.interval, config.notify)
+	return newSimpleWatcher(config)
 }
 
 func (singleton) Context(value context.Context) option {
 	return func(this *configuration) { this.context = value }
 }
-func (singleton) Filename(value string) option {
-	return func(this *configuration) { this.filename = strings.TrimSpace(value) }
+func (singleton) Filenames(values ...string) option {
+	return func(this *configuration) {
+		for i := range values {
+			values[i] = strings.TrimSpace(values[i])
+		}
+	}
 }
 func (singleton) Interval(value time.Duration) option {
 	return func(this *configuration) { this.interval = value }
@@ -39,7 +43,7 @@ func (singleton) apply(options ...option) option {
 func (singleton) defaults(options ...option) []option {
 	return append([]option{
 		Options.Context(context.Background()),
-		Options.Filename(""),
+		Options.Filenames(),
 		Options.Interval(time.Hour),
 		Options.Notify(func() {}),
 		Options.Logger(nop{}),
@@ -49,11 +53,11 @@ func (singleton) defaults(options ...option) []option {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type configuration struct {
-	context  context.Context
-	filename string
-	interval time.Duration
-	notify   func()
-	logger   logger
+	context   context.Context
+	filenames []string
+	interval  time.Duration
+	notify    func()
+	logger    logger
 }
 
 type option func(*configuration)
