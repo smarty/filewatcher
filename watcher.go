@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,13 +19,15 @@ type pollingWatcher struct {
 }
 
 func newSimpleWatcher(config configuration) ListenCloser {
-	if len(config.filenames) == 0 || config.interval < 0 {
-		return nop{}
-	}
-
 	filenames := make([]string, 0, len(config.filenames))
 	for _, filename := range config.filenames {
-		filenames = append(filenames, filename)
+		if filename = strings.TrimSpace(filename); len(filename) > 0 {
+			filenames = append(filenames, filename)
+		}
+	}
+
+	if len(config.filenames) == 0 || config.interval < 0 {
+		return nop{}
 	}
 
 	child, shutdown := context.WithCancel(config.context)
@@ -40,7 +43,9 @@ func newSimpleWatcher(config configuration) ListenCloser {
 }
 
 func (this *pollingWatcher) Listen() {
-	this.update()
+	for i := range this.filenames {
+		this.known[i] = this.lastModified(this.filenames[i])
+	}
 
 	for this.sleep() {
 		if this.update() {
@@ -48,7 +53,7 @@ func (this *pollingWatcher) Listen() {
 		}
 	}
 }
-func (this *pollingWatcher) update() (updated bool) {
+func (this *pollingWatcher) update() bool {
 	count := 0
 
 	for index, _ := range this.filenames {
@@ -66,13 +71,16 @@ func (this *pollingWatcher) update() (updated bool) {
 		}
 
 		count++
-		updated = true
 		this.known[index] = lastModified
 		this.logger.Printf("[INFO] Watched file [%s] was modified on [%s].", this.filenames[index], lastModified.String())
 	}
 
+	if count == 0 {
+		return false
+	}
+
 	this.logger.Printf("[INFO] [%d] watched files modified, notifying subscribers...", count)
-	return updated
+	return true
 }
 func (this *pollingWatcher) lastModified(filename string) time.Time {
 	// simple: using last-modification timestamp instead of file hash
@@ -84,12 +92,10 @@ func (this *pollingWatcher) sleep() bool {
 	ctx, cancel := context.WithTimeout(this.childContext, this.interval)
 	defer cancel()
 	<-ctx.Done()
-	return errors.Is(ctx.Err(), context.Canceled)
+	return errors.Is(ctx.Err(), context.DeadlineExceeded)
 }
 
 func (this *pollingWatcher) Close() error {
 	this.shutdown()
 	return nil
 }
-
-func (this *pollingWatcher) Initialize() error { return nil }

@@ -2,7 +2,6 @@ package filewatcher
 
 import (
 	"context"
-	"strings"
 	"time"
 )
 
@@ -16,11 +15,7 @@ func (singleton) Context(value context.Context) option {
 	return func(this *configuration) { this.context = value }
 }
 func (singleton) Filenames(values ...string) option {
-	return func(this *configuration) {
-		for i := range values {
-			values[i] = strings.TrimSpace(values[i])
-		}
-	}
+	return func(this *configuration) { this.filenames = values }
 }
 func (singleton) Interval(value time.Duration) option {
 	return func(this *configuration) { this.interval = value }
@@ -44,7 +39,7 @@ func (singleton) defaults(options ...option) []option {
 	return append([]option{
 		Options.Context(context.Background()),
 		Options.Filenames(),
-		Options.Interval(time.Hour),
+		Options.Interval(time.Minute),
 		Options.Notify(func() {}),
 		Options.Logger(nop{}),
 	}, options...)
@@ -71,6 +66,5 @@ type nop struct{}
 
 func (nop) Printf(string, ...any) {}
 
-func (nop) Initialize() error { return nil }
-func (nop) Listen()           {}
-func (nop) Close() error      { return nil }
+func (nop) Listen()      {}
+func (nop) Close() error { return nil }
