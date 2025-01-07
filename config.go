@@ -71,5 +71,6 @@ type nop struct{}
 
 func (nop) Printf(string, ...any) {}
 
-func (nop) Listen()      {}
-func (nop) Close() error { return nil }
+func (nop) Initialize() error { return nil }
+func (nop) Listen()           {}
+func (nop) Close() error      { return nil }

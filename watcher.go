@@ -91,3 +91,5 @@ func (this *pollingWatcher) Close() error {
 	this.shutdown()
 	return nil
 }
+
+func (this *pollingWatcher) Initialize() error { return nil }
