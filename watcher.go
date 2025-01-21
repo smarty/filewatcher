@@ -56,7 +56,7 @@ func (this *pollingWatcher) Listen() {
 func (this *pollingWatcher) update() bool {
 	count := 0
 
-	for index, _ := range this.filenames {
+	for index := range this.filenames {
 		lastModified := this.lastModified(this.filenames[index])
 		if lastModified.IsZero() {
 			continue // no modification time
@@ -84,8 +84,11 @@ func (this *pollingWatcher) update() bool {
 }
 func (this *pollingWatcher) lastModified(filename string) time.Time {
 	// simple: using last-modification timestamp instead of file hash
-	stat, _ := os.Stat(filename)
-	return stat.ModTime()
+	if stat, err := os.Stat(filename); err == nil {
+		return stat.ModTime()
+	}
+
+	return time.Time{}
 }
 func (this *pollingWatcher) sleep() bool {
 	// simple: polling every interval instead of watching for filesystem changes
